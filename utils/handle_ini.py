@@ -10,18 +10,28 @@ class Handle_Ini(ConfigParser):
 
     def __init__(self,filename):
         super().__init__()
-        self.read(filename)
         self.filename = filename   # 将文件设置为一个实例变量
+        self.read(filename, encoding='utf-8')
 
     def get_value(self,section,option):
         """
-        获取ini配置文件中指定section下option对应的值
+        获取ini配置文件中指定section下option对应的值。
+        每次读取前重新加载文件，避免登录用例写入 cookie 后，其他用例仍使用旧值。
         :param section:
         :param option:
         :return:
         """
+        self.read(self.filename, encoding='utf-8')
         v = self.get(section,option)
         return v
+
+    def get_headers(self):
+        """读取最新请求头，并带上登录后写回配置文件的 cookie。"""
+        headers = eval(self.get_value('test_env', 'headers'))
+        cookie = self.get_value('test_env', 'cookie')
+        if cookie:
+            headers['Cookie'] = cookie
+        return headers
 
     def write_data(self,section,option,value):
         """
@@ -32,9 +42,8 @@ class Handle_Ini(ConfigParser):
         :return:
         """
         self.set(section,option,value)  # 通过当前类对象调用set方法设置指定的section中的option以及对应的值
-        f = open(self.filename,'w')   # 通过open函数将配置文件创建出一个文件流对象f
-        self.write(f)   # 通过当前类对象调用write方法，将当前对象中设置好的section和option写入到配置文件中
-        f.close()   # 关闭文件流对象
+        with open(self.filename, 'w', encoding='utf-8') as f:  # 通过open函数将配置文件创建出一个文件流对象f
+            self.write(f)   # 通过当前类对象调用write方法，将当前对象中设置好的section和option写入到配置文件中
 
 
 if __name__ == '__main__':

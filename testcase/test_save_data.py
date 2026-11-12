@@ -8,17 +8,12 @@ from utils.handle_requests import Handle_Request
 from utils.hand_exl import Handle_Excel
 from ddt import ddt,data
 from utils.handle_db import Handle_db
-import json
-import re
 ini_file=os.path.join(conf_path,'config.ini')
 i_file=Handle_Ini(ini_file)
 
 #服务器层
 host=i_file.get_value('test_env','host')
 port=i_file.get_value('test_env','port')
-cookie=i_file.get_value('test_env','cookie')
-headers=eval(i_file.get_value('test_env','headers'))
-headers['Cookie']=cookie
 
 #数据库层
 db_host=i_file.get_value('mysql_env','host')
@@ -38,50 +33,78 @@ class Test_Save_Data(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.req=Handle_Request()
-        cls.db = Handle_db(
-            host=db_host,
-            port=db_port,
-            user=db_username,
-            password=db_password,
-            database=db_database,
-        )
+        cls.db = None
+        cls.db_error = None
+        try:
+            cls.db = Handle_db(
+                host=db_host,
+                port=db_port,
+                user=db_username,
+                password=db_password,
+                database=db_database,
+            )
+        except Exception as e:
+            # 数据库连不上时仍发送接口请求，避免整类用例在 setUpClass 直接中断
+            cls.db_error = e
+            print('数据库连接失败：%s' % e)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        if cls.db:
+            cls.db.close()
+
+    def setUp(self):
+        self.headers=i_file.get_headers()
+
+    def _require_db(self):
+        if self.db is None:
+            raise AssertionError('数据库连接失败：%s' % self.db_error)
 
     @data(*cases)
     def test_saveuser(self,case):
         save_url=f'http://{host}:{port}{case["url"]}'
         method=case['method']
         save_data=case['data']
-        #先查原用户数
         table_name=case['table_name'] #数据所在表名
-        sql1=f'select count(*) from {table_name}'
-        before_count=self.db.count(sql1)
-        resp=self.req.send(method=method,url=save_url,data=save_data,headers=headers)
-        result=resp.json()
-        #result = json.loads(resp.content.decode('utf-8-sig'))
-        expected=eval(case['expected'])
-        case_row=int(case['case_id'])+1
-        case_data=eval(case['data'])
+        case_data=self.req.parse_body(case['data'])
         account=case_data['userAccount']
+        before_count=None
+        if self.db is not None:
+            before_count=self.db.count(f'select count(*) from {table_name}')
+        resp=self.req.send(method=method,url=save_url,data=save_data,headers=self.headers)
+        result=self.req.to_json(resp)
+        expected=self.req.parse_body(case['expected'])
+        case_row=int(case['case_id'])+1
 
         #新增断言
         try:
             #断言1：断言状态码和信息
-            self.assertEqual(expected['code'], result['code'])
+            self.assertEqual(str(expected['code']), str(result['code']))
             self.assertEqual(expected['msg'], result['msg'])
 
-            #断言2：断言数据库
-            if result['code']==200:
-                #查询是否存在
+            #断言2：断言数据库。接口返回的 code 是字符串 "200"，不能和整数 200 比较
+            if str(result['code'])=='200':
+                self._require_db()
                 sql2=f'select * from {table_name} where user_account=%s'
                 row=self.db.query_one(sql2,(account,))
-                self.assertIsNotNone(row,f'数据库中没有找到新增账号：{account}')
-                #字段对比
-
+                self.assertIsNotNone(row,'数据库中没有找到新增账号：%s' % account)
+                field_map={
+                    'userName':'user_name',
+                    'userSex':'user_sex',
+                    'userMobile':'user_mobile',
+                    'userEmail':'user_email',
+                    'userAccount':'user_account',
+                }
+                for req_key, column in field_map.items():
+                    if column in row and req_key in case_data:
+                        self.assertEqual(str(row[column]), str(case_data[req_key]))
+                after_count=self.db.count(f'select count(*) from {table_name}')
+                self.assertEqual(before_count + 1, after_count, '新增后用户数量没有增加')
 
         except Exception as e:
             print(e)
             e_file.write_data(case_row, 9, '测试不通过')
-            raise AssertionError('断言失败')
+            raise
         else:
             e_file.write_data(case_row, 9, '测试通过')
 

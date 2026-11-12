@@ -2,15 +2,17 @@
 
 # 此模块主要是对excel文件进行读写的工具类
 
+import os
 import openpyxl
 from utils.handle_path import *
 
 class Handle_Excel():
 
     def __init__(self,filename,sheetname):
+        self.filename = filename
+        self.sheetname = sheetname
         self.wk = openpyxl.load_workbook(filename)  # 通过openpyxl库中的load_workbook函数打开指定的excel文件，并返回一个文件流对象
         self.st = self.wk[sheetname]   # 获取文件流对象中的指定sheet页对象
-        self.filename = filename
 
     def read_data(self):
         """
@@ -34,8 +36,12 @@ class Handle_Excel():
         :param value:
         :return:
         '''
+        # 重新加载后再写入。多个用例同时打开同一个工作簿时，后保存的对象会盖掉先写入的结果
+        self.wk = openpyxl.load_workbook(self.filename)
+        self.st = self.wk[self.sheetname]
         self.st.cell(row,col,value) #通过sheet页对象调用cell方法指定单元格写入
         self.wk.save(self.filename) #通过excel文件流对象调用save方法，将写入到sheet页对象中的数据保存到excel中
+        self.wk.close()
 
 
 

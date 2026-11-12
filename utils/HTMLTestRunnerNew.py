@@ -490,11 +490,11 @@ class _TestResult(TestResult):
         output = self.complete_output()
         self.result.append((2, test, output, _exc_str))
         if self.verbosity > 1:
-            sys.stderr.write('E列表  ')
+            sys.stderr.write('E  ')
             sys.stderr.write(str(test))
             sys.stderr.write('\n')
         else:
-            sys.stderr.write('E列表')
+            sys.stderr.write('E')
 
     def addFailure(self, test, err):
         self.failure_count += 1

@@ -7,7 +7,6 @@ from utils.handle_ini import Handle_Ini
 from utils.handle_requests import Handle_Request
 from utils.hand_exl import Handle_Excel
 from ddt import ddt,data
-import re
 ini_file=os.path.join(conf_path,'config.ini')
 i_file=Handle_Ini(ini_file)
 host=i_file.get_value('test_env','host')
@@ -33,34 +32,36 @@ class Test_Login(unittest.TestCase):
         # print(login_data)
         # print(type(login_data))
         #获取接口的请求头
-        headers=eval(i_file.get_value('test_env','headers'))
+        headers=i_file.get_headers()
+        headers.pop('Cookie', None)
         #print(headers)
         #发送接口请求
         resp=self.req.send(method=method,url=login_url,data=login_data,headers=headers)
-        result=resp.json()
+        result=self.req.to_json(resp)
         #获取期望结果
-        expected=eval(case['expected'])
+        expected=self.req.parse_body(case['expected'])
 
         #获取用例所在行
         case_row=int(case['case_id'])+1
 
         #登录断言
         try:
-            self.assertEqual(expected['code'],result['code'])
+            self.assertEqual(str(expected['code']),str(result['code']))
             self.assertEqual(expected['msg'],result['msg'])
+            if result['msg']=='登录成功！':
+                cookie_items=resp.cookies.get_dict()
+                if not cookie_items:
+                    raise AssertionError('登录成功但响应中没有 cookie')
+                cookie='; '.join('%s=%s' % (key, value) for key, value in cookie_items.items())
+                i_file.write_data('test_env','cookie',cookie)
 
         except Exception as e:
             print(result)
             print(e)
             e_file.write_data(case_row,8,'测试不通过')
-            raise AssertionError('断言失败')
+            raise
         else:
             e_file.write_data(case_row, 8, '测试通过')
-            if result['msg']=='登录成功！':
-                resp_cookie=str(resp.cookies)
-                cookie=re.findall('Cookie (.+?)for',resp_cookie)[0].strip()
-                i_file.write_data('test_env','cookie',cookie)
-                #print(resp_cookie)
 
 
 

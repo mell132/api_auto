@@ -19,15 +19,18 @@ from time import *
 from utils.handle_path import *
 
 def runcases():
-    suite1 = unittest.defaultTestLoader.discover(start_dir=case_path,pattern='test_*.py')
-    report_file = report_path + '\\' + 'report' + strftime("%m%d%H%M%S") + '.html'
-    f = open(report_file,'wb')
-    runner = HTMLTestRunner(stream=f,
-                            title='ui自动化测试报告',
-                            description='执行情况如下：',
-                            tester='小申')
-    runner.run(suite1)
-    f.close()
+    # 登录必须先执行，后面的用例依赖它写回的 cookie；删除必须在新增之后
+    loader = unittest.TestLoader()
+    suite1 = unittest.TestSuite()
+    for pattern in ('test_login.py', 'test_save_data.py', 'test_query_data.py', 'test_delete.py'):
+        suite1.addTests(loader.discover(start_dir=case_path, pattern=pattern))
+    report_file = os.path.join(report_path, 'report' + strftime("%m%d%H%M%S") + '.html')
+    with open(report_file, 'wb') as f:
+        runner = HTMLTestRunner(stream=f,
+                                title='接口自动化测试报告',
+                                description='执行情况如下：',
+                                tester='小申')
+        runner.run(suite1)
 
 
 if __name__ == '__main__':
